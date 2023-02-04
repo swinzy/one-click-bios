@@ -1,10 +1,8 @@
 {
-    "name" : "One-Click BIOS",
-    "description" : "Add an option to restart into computer firmware settings",
-    "shell-version" : [
-        "3.36"
-    ],
-    "url" : "",
-    "uuid" : "oneclickbios@sao.studio",
-    "version" : 0.1
+  "name": "One-Click BIOS",
+  "description": "Add an option to restart into firmware settings directly from OS",
+  "uuid": "oneclickbios@sao.studio",
+  "shell-version": [
+    "43"
+  ]
 }

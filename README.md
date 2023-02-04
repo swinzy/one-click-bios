@@ -1,11 +1,11 @@
 # One-Click BIOS
-A GNOME extension that adds an option to restart into firmware settings.
+A GNOME extension that allows you to restart into firmware settings directly from OS.<br>
+Currently supports: GNOME 43.
 
 ## Usage:
 1. Press the aggregate menu as usual
-2. Hold <kbd>Shift</kbd> and select "Power Off / Log Out"
-3. Select "Restart into Firmware Settings"
-4. Done! The computer will now restart straight into your BIOS/UEFI settings automatically
+2. Hold <kbd>Shift</kbd> and click the power button
+3. Done! Proceed with the next dialog appeared. The computer will now restart straight into your BIOS/UEFI settings automatically!
 
-## Note: The code is currently very buggy. Do not try it unless you know what you are doing!
-Even with that said, it should not break anything. In case of anything went wrong, just hit ```r``` into <kbd>Alt</kbd> + <kbd>F2</kbd> (only if you're running Xorg).
+## Note:
+This is my first GNOME extension and this is my first time using GJS. I learned most of the code from the GitLab repo `GNOME/gnome-shell` and so there are still some part that I don't understand. Feel free to provide me any suggestions!
