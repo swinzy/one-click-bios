@@ -1,6 +1,6 @@
 {
   "name": "One-Click BIOS",
-  "description": "Add an option to restart into firmware settings directly from OS",
+  "description": "Restart into firmware settings directly from OS",
   "uuid": "oneclickbios@sao.studio",
   "shell-version": [
     "43"
