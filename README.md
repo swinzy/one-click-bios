@@ -1,4 +1,5 @@
 # One-Click BIOS
+![Header](./Banner.png)
 A GNOME extension that allows you to restart into firmware settings directly from OS.<br>
 Currently supports: GNOME 43.
 
