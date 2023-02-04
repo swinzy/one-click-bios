@@ -36,7 +36,6 @@ class Extension {
     }
 
     enable() {
-
         // Find the instance of "Power Off" button according to its class type
         for (let i = 0; i < SystemItem.child.get_children().length; i++) {
             let child = SystemItem.child.get_child_at_index(i);
@@ -61,7 +60,7 @@ class Extension {
     _powerMenuButtonClicked(_widget, event) {
         if (event.get_state() & Gdk.ModifierType.SHIFT_MASK) {
             // If cannot restart, do not trigger Restart Into Firmware
-            if (!powerMenuButton._systemActions.can_restart) return;
+            if (!_widget._systemActions.can_restart) return;
             
             let dialog = new RestartIntoFirmwareDialog();
             dialog.open();
@@ -73,7 +72,7 @@ class Extension {
 var RestartIntoFirmwareDialog = GObject.registerClass(
     class RestartIntoFirmwareDialog extends ModalDialog.ModalDialog {
         _init() {
-            super._init({ destroyOnClose: false }); // TODO: I don't understand why but...
+            super._init({ destroyOnClose: true });
             this._buildLayout();
 
             // Used for ticking to automatically restart
