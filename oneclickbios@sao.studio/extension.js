@@ -55,6 +55,12 @@ class Extension {
     disable() {
         // Disconnect the listening event so that it won't show Restart to Firmware anymore
         this._powerMenuButton.disconnect(this._powerMenuButtonEventId);
+
+        // Remove timeout loop source
+        if (this._timerId) {
+            GLib.source_remove(this._timerId);
+            this._timerId = null;
+        }
     }
 
     _powerMenuButtonClicked(_widget, event) {
