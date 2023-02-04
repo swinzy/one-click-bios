@@ -63,6 +63,9 @@ function disable() {
         GLib.source_remove(timerId);
         timerId = null;
     }
+
+    // Remove reference to power menu button
+    powerMenuButton = null;
 }
 
 function powerMenuButtonClicked(_widget, event) {
