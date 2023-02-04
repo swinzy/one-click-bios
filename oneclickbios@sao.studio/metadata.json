@@ -2,6 +2,8 @@
   "name": "One-Click BIOS",
   "description": "Restart into firmware settings directly from OS",
   "uuid": "oneclickbios@sao.studio",
+  "url": "https://github.com/m1nicrusher/one-click-bios",
+  "version": 1,
   "shell-version": [
     "43"
   ]
