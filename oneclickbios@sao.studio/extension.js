@@ -31,49 +31,50 @@ const QuickSettingsMenu = imports.ui.main.panel.statusArea.quickSettings;
 // This is the live instance of the System Item
 const SystemItem = QuickSettingsMenu._system._systemItem;
 
-class Extension {
-    constructor() {
+let powerMenuButton = null;
+let powerMenuButtonEventId = null;
+let timerId = null;
+
+function init() { }
+
+function enable() {
+    // Find the instance of "Power Off" button according to its class type
+    for (let i = 0; i < SystemItem.child.get_children().length; i++) {
+        let child = SystemItem.child.get_child_at_index(i);
+
+        // TODO: Please someone find me a better solution!
+        if (child.constructor.name == "ShutdownItem")
+            powerMenuButton = child;
     }
 
-    enable() {
-        // Find the instance of "Power Off" button according to its class type
-        for (let i = 0; i < SystemItem.child.get_children().length; i++) {
-            let child = SystemItem.child.get_child_at_index(i);
+    // Detect Shift+Click by listening pressing event of the Power Menu Button
+    powerMenuButtonEventId = powerMenuButton.connect(
+        "button-press-event",
+        powerMenuButtonClicked
+    );
+} 
 
-            // TODO: Please someone find me a better solution!
-            if (child.constructor.name == "ShutdownItem")
-                this._powerMenuButton = child;
-        }
+function disable() {
+    // Disconnect the listening event so that it won't show Restart to Firmware anymore
+    powerMenuButton.disconnect(powerMenuButtonEventId);
 
-        // Detect Shift+Click by listening pressing event of the Power Menu Button
-        this._powerMenuButtonEventId = this._powerMenuButton.connect(
-            "button-press-event",
-            this._powerMenuButtonClicked
-        );
-    }   
-
-    disable() {
-        // Disconnect the listening event so that it won't show Restart to Firmware anymore
-        this._powerMenuButton.disconnect(this._powerMenuButtonEventId);
-
-        // Remove timeout loop source
-        if (this._timerId) {
-            GLib.source_remove(this._timerId);
-            this._timerId = null;
-        }
+    // Remove timeout loop source
+    if (timerId) {
+        GLib.source_remove(timerId);
+        timerId = null;
     }
-
-    _powerMenuButtonClicked(_widget, event) {
-        if (event.get_state() & Gdk.ModifierType.SHIFT_MASK) {
-            // If cannot restart, do not trigger Restart Into Firmware
-            if (!_widget._systemActions.can_restart) return;
-            
-            let dialog = new RestartIntoFirmwareDialog();
-            dialog.open();
-            Main.panel.closeQuickSettings();
-        }
-    }  
 }
+
+function powerMenuButtonClicked(_widget, event) {
+    if (event.get_state() & Gdk.ModifierType.SHIFT_MASK) {
+        // If cannot restart, do not trigger Restart Into Firmware
+        //if (!_widget._systemActions.can_restart) return;
+            
+        let dialog = new RestartIntoFirmwareDialog();
+        dialog.open();
+        Main.panel.closeQuickSettings();
+    }
+} 
 
 var RestartIntoFirmwareDialog = GObject.registerClass(
     class RestartIntoFirmwareDialog extends ModalDialog.ModalDialog {
@@ -107,7 +108,7 @@ var RestartIntoFirmwareDialog = GObject.registerClass(
                     this._stopTimer();
                     this.close();
                 },
-                label: _('Cancel'),     // Why _()
+                label: _('Cancel'),
                 key: Clutter.KEY_Escape,
             });
 
@@ -125,7 +126,7 @@ var RestartIntoFirmwareDialog = GObject.registerClass(
             let startTime = GLib.get_monotonic_time();
             this._secondsLeft = this._totalSecondsToStayOpen;
     
-            this._timerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
+            timerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
                 let currentTime = GLib.get_monotonic_time();
                 let secondsElapsed = (currentTime - startTime) / 1000000;
     
@@ -137,19 +138,19 @@ var RestartIntoFirmwareDialog = GObject.registerClass(
                 }
     
                 GLib.spawn_command_line_async("systemctl reboot --firmware");
-                this._timerId = 0;
+                timerId = 0;
     
                 return GLib.SOURCE_REMOVE;
             });
 
             // TODO: What's the purpose of this line?
-            //GLib.Source.set_name_by_id(this._timerId, '[gnome-shell] this._confirm');
+            //GLib.Source.set_name_by_id(timerId, '[gnome-shell] this._confirm');
         }
 
         _stopTimer() {
-            if (this._timerId > 0) {
-                GLib.source_remove(this._timerId);
-                this._timerId = 0;
+            if (timerId > 0) {
+                GLib.source_remove(timerId);
+                timerId = 0;
             }
         }
 
@@ -162,8 +163,3 @@ var RestartIntoFirmwareDialog = GObject.registerClass(
         }
     }
 );
-    
-
-function init() {
-    return new Extension();
-}
