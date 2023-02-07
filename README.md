@@ -10,5 +10,9 @@ Currently supports: GNOME 43.
 2. Hold <kbd>Shift</kbd> and click the power button
 3. Done! Proceed with the next dialog appeared. The computer will now restart straight into your BIOS/UEFI settings automatically!
 
+## To-Do:
+- [ ] Update timer seconds dynamically (_sync())
+- [ ] Translation (haven't tested)
+
 ## Note:
 This is my first GNOME extension and this is my first time using GJS. I learned most of the code from the GitLab repo `GNOME/gnome-shell` and `gjs.guide`. Feel free to provide me any suggestions!
