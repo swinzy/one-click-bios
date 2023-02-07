@@ -119,6 +119,7 @@ var RestartIntoFirmwareDialog = GObject.registerClass(
             this.addButton({
                 action: () => {
                     this._stopTimer();
+                    this._rebootIntoFirmware();
                     this.close();
                 },
                 label: _('Restart'),
@@ -140,7 +141,7 @@ var RestartIntoFirmwareDialog = GObject.registerClass(
                     return GLib.SOURCE_CONTINUE;
                 }
     
-                GLib.spawn_command_line_async("systemctl reboot --firmware");
+                this._rebootIntoFirmware();
                 timerId = 0;
     
                 return GLib.SOURCE_REMOVE;
@@ -148,6 +149,10 @@ var RestartIntoFirmwareDialog = GObject.registerClass(
 
             // TODO: What's the purpose of this line?
             //GLib.Source.set_name_by_id(timerId, '[gnome-shell] this._confirm');
+        }
+
+        _rebootIntoFirmware() {
+            GLib.spawn_command_line_async("systemctl reboot --firmware");
         }
 
         _stopTimer() {
