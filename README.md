@@ -13,6 +13,3 @@ Currently supports: GNOME 43.
 ## To-Do:
 - [ ] Update timer seconds dynamically (_sync())
 - [ ] Translation (haven't tested)
-
-## Note:
-This is my first GNOME extension and this is my first time using GJS. I learned most of the code from the GitLab repo `GNOME/gnome-shell` and `gjs.guide`. Feel free to provide me any suggestions!
