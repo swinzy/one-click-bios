@@ -16,158 +16,110 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-const { Gio, GObject, Gdk, Gtk, St, Clutter, GLib } = imports.gi;
+import Gio from "gi://Gio";
+import GLib from "gi://GLib";
+import Gdk from "gi://Gdk";
 
-const QuickSettings = imports.ui.quickSettings;
-const System = imports.ui.status.system;
-const Main = imports.ui.main;
-const Dialog = imports.ui.dialog;
-const SystemActions = imports.misc.systemActions;
-const ModalDialog = imports.ui.modalDialog;
+import * as Main from "resource:///org/gnome/shell/ui/main.js";
+import * as QuickSettings from "resource:///org/gnome/shell/ui/quickSettings.js";
+import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
+import * as SystemActions from 'resource:///org/gnome/shell/misc/systemActions.js';
 
-// This is the live instance of the Quick Settings menu
-const QuickSettingsMenu = imports.ui.main.panel.statusArea.quickSettings;
+const RESTART_ACTION_INDEX = 1;
+const FIND_SYS_MENU_TIMEOUT = 1000;
+const FIND_SYS_MENU_MAX_RETRY = 30;
 
-// This is the live instance of the System Item
-const SystemItem = QuickSettingsMenu._system._systemItem;
-
-let powerMenuButton = null;
-let powerMenuButtonEventId = null;
-let timerId = null;
-
-function init() { }
-
-function enable() {
-    // Find the instance of "Power Off" button according to its class type
-    for (let i = 0; i < SystemItem.child.get_children().length; i++) {
-        let child = SystemItem.child.get_child_at_index(i);
-
-        // TODO: Please someone find me a better solution!
-        if (child.constructor.name == "ShutdownItem")
-            powerMenuButton = child;
+export default class OneClickBios extends Extension {
+    constructor(metadata) {
+        super(metadata);
+        this._indicator = null;
     }
 
-    // Detect Shift+Click by listening pressing event of the Power Menu Button
-    powerMenuButtonEventId = powerMenuButton.connect(
-        "button-press-event",
-        powerMenuButtonClicked
-    );
-} 
+    enable() {
+        // If we can find system quicksettings then enable now
+        if (Main.panel.statusArea.quicksettings._system) {
+            this._enable();
+        } else {
+            let tries = 0;
 
-function disable() {
-    // Disconnect the listening event so that it won't show Restart to Firmware anymore
-    powerMenuButton.disconnect(powerMenuButtonEventId);
+            // Remove previous timer
+            if (this._hSysMenuTimer) {
+                GLib.source_remove(this._hSysMenuTimer);
+                this._hSysMenuTimer = null;
+            }
 
-    // Remove timeout loop source
-    if (timerId) {
-        GLib.source_remove(timerId);
-        timerId = null;
-    }
-
-    // Remove reference to power menu button
-    powerMenuButton = null;
-}
-
-function powerMenuButtonClicked(_widget, event) {
-    if (event.get_state() & Gdk.ModifierType.SHIFT_MASK) {
-        // If cannot restart, do not trigger Restart Into Firmware
-        //if (!_widget._systemActions.can_restart) return;
-            
-        let dialog = new RestartIntoFirmwareDialog();
-        dialog.open();
-        Main.panel.closeQuickSettings();
-    }
-} 
-
-var RestartIntoFirmwareDialog = GObject.registerClass(
-    class RestartIntoFirmwareDialog extends ModalDialog.ModalDialog {
-        _init() {
-            super._init({ destroyOnClose: true });
-            this._buildLayout();
-
-            // Used for ticking to automatically restart
-            this._secondsLeft = 0;
-            this._totalSecondsToStayOpen = 60;
-            this._startTimer();
-        }
-
-        _buildLayout() {
-            // Title
-            let title = new Dialog.MessageDialogContent({
-                title: _('Restart into Firmware Settings'),
-            });
-            this.contentLayout.add_child(title);
-            
-            // Content
-            let content = new St.Label({
-                text: _("The system will restart into firmware settings in 60 seconds."),
-                y_align: Clutter.ActorAlign.CENTER,
-            });
-            this.contentLayout.add_child(content);
-
-            // Cancel button
-            this.addButton({
-                action: () => {
-                    this._stopTimer();
-                    this.close();
-                },
-                label: _('Cancel'),
-                key: Clutter.KEY_Escape,
-            });
-
-            // Restart button
-            this.addButton({
-                action: () => {
-                    this._stopTimer();
-                    this._rebootIntoFirmware();
-                    this.close();
-                },
-                label: _('Restart'),
-            });
-        }
-
-        _startTimer() {
-            let startTime = GLib.get_monotonic_time();
-            this._secondsLeft = this._totalSecondsToStayOpen;
-    
-            timerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
-                let currentTime = GLib.get_monotonic_time();
-                let secondsElapsed = (currentTime - startTime) / 1000000;
-    
-                this._secondsLeft = this._totalSecondsToStayOpen - secondsElapsed;
-                if (this._secondsLeft > 0) {
-                    // Update how many seconds left on modal
-                    this._sync();
-                    return GLib.SOURCE_CONTINUE;
+            // Set timer loop to try finding system menu
+            this._hSysMenuTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, FIND_SYS_MENU_TIMEOUT, () => {
+                // If too many retries
+                if (tries >= FIND_SYS_MENU_MAX_RETRY) {
+                    throw new Error("Cannot find system menu.");
+                    this._hSysMenuTimer = null;
+                    return false;
                 }
-    
-                this._rebootIntoFirmware();
-                timerId = 0;
-    
-                return GLib.SOURCE_REMOVE;
-            });
 
-            // TODO: What's the purpose of this line?
-            //GLib.Source.set_name_by_id(timerId, '[gnome-shell] this._confirm');
+                // FOUND
+                if (Main.panel.statusArea.quickSettings._system) {
+                    this._hSysMenuTimer = null;
+                    this._enable();
+                    return false;
+                }
+
+                // NOT FOUND
+                tries++;
+                return true;
+            })
         }
+    }
 
-        _rebootIntoFirmware() {
-            GLib.spawn_command_line_async("systemctl reboot --firmware");
-        }
+    _enable() {
+        // This is the live instance of the System Item
+        const SystemItem = Main.panel.statusArea.quickSettings._system._systemItem;
 
-        _stopTimer() {
-            if (timerId > 0) {
-                GLib.source_remove(timerId);
-                timerId = 0;
+        // Find Power menu dynamically
+        var powerMenu = null;
+        for (let i = 0; i < SystemItem.child.get_children().length; i++) {
+            let child = SystemItem.child.get_child_at_index(i);
+
+            // TODO: Please someone find me a better solution!
+            if (child.constructor.name == "ShutdownItem") {
+                powerMenu = child.menu;
+                break;
             }
         }
+        
+        // Find "Restart..." action.
+        // Because these actions are dynamically populated with no id defined. We can only assume the index will not change.
+        // String matching is not feasible due to i18n.
+        this._restartAction = powerMenu._getMenuItems()[RESTART_ACTION_INDEX];
 
-        // TODO: Feature to be implemented
-        _sync() {
-            let open = this.state == ModalDialog.State.OPENING || this.state == ModalDialog.State.OPENED;
-            if (!open)
-                return;
-            let displayTime = (this._totalSecondsToStayOpen - this._secondsLeft).toString();
+        // Disable original click action and use our custom press event instead
+        this._restartAction._clickAction.enabled = false;
+        this._restartClickEventId = this._originalRestartAction.connect(
+            "button-press-event",
+            this.restartActionClicked
+        );
+    }
+
+    disable() {
+        // Revert original behaviour
+        this._restartAction.disconnect(this._restartClickEventId);
+        this._restartClickEventId = null;
+        this._restartAction._clickAction.enabled = true;
+
+        // Destroy timer, if any
+        if (this._hSysMenuTimer) {
+            GLib.source_remove(this._hSysMenuTimer);
+            this._hSysMenuTimer = null;
         }
     }
-);
+
+    restartActionClicked(_widget, event) {
+        if (event.get_state() & Gdk.ModifierType.SHIFT_MASK) {
+            GLib.spawn_command_line_async("systemctl reboot --firmware");
+        } else {
+            const systemActions = new SystemActions.getDefault();
+            systemActions.activateRestart();
+        }
+    }
+}
+
