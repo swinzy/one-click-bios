@@ -18,7 +18,7 @@
 
 import Gio from "gi://Gio";
 import GLib from "gi://GLib";
-import Gdk from "gi://Gdk";
+import Clutter from "gi://Clutter";
 
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import * as QuickSettings from "resource:///org/gnome/shell/ui/quickSettings.js";
@@ -37,11 +37,11 @@ export default class OneClickBios extends Extension {
 
     enable() {
         // If we can find system quicksettings then enable now
-        if (Main.panel.statusArea.quicksettings._system) {
+        if (Main.panel.statusArea.quickSettings && Main.panel.statusArea.quickSettings._system) {
             this._enable();
         } else {
             let tries = 0;
-
+            
             // Remove previous timer
             if (this._hSysMenuTimer) {
                 GLib.source_remove(this._hSysMenuTimer);
@@ -58,7 +58,7 @@ export default class OneClickBios extends Extension {
                 }
 
                 // FOUND
-                if (Main.panel.statusArea.quickSettings._system) {
+                if (Main.panel.statusArea.quickSettings && Main.panel.statusArea.quickSettings._system) {
                     this._hSysMenuTimer = null;
                     this._enable();
                     return false;
@@ -86,7 +86,6 @@ export default class OneClickBios extends Extension {
                 break;
             }
         }
-        
         // Find "Restart..." action.
         // Because these actions are dynamically populated with no id defined. We can only assume the index will not change.
         // String matching is not feasible due to i18n.
@@ -94,7 +93,7 @@ export default class OneClickBios extends Extension {
 
         // Disable original click action and use our custom press event instead
         this._restartAction._clickAction.enabled = false;
-        this._restartClickEventId = this._originalRestartAction.connect(
+        this._restartClickEventId = this._restartAction.connect(
             "button-press-event",
             this.restartActionClicked
         );
@@ -102,9 +101,11 @@ export default class OneClickBios extends Extension {
 
     disable() {
         // Revert original behaviour
-        this._restartAction.disconnect(this._restartClickEventId);
-        this._restartClickEventId = null;
-        this._restartAction._clickAction.enabled = true;
+        if (this._restartAction) {
+            this._restartAction.disconnect(this._restartClickEventId);
+            this._restartClickEventId = null;
+            this._restartAction._clickAction.enabled = true;
+        }
 
         // Destroy timer, if any
         if (this._hSysMenuTimer) {
@@ -114,7 +115,7 @@ export default class OneClickBios extends Extension {
     }
 
     restartActionClicked(_widget, event) {
-        if (event.get_state() & Gdk.ModifierType.SHIFT_MASK) {
+        if (event.get_state() & Clutter.ModifierType.SHIFT_MASK) {
             GLib.spawn_command_line_async("systemctl reboot --firmware");
         } else {
             const systemActions = new SystemActions.getDefault();
