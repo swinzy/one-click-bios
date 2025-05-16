@@ -3,8 +3,8 @@
   "description": "Restart into firmware settings directly from OS\n\nHold Shift and click \"Restart...\" option to trigger restart into firmware settings.\n\nAny suggestion is appreciated on GitHub!",
   "uuid": "oneclickbios@sao.studio",
   "url": "https://github.com/swinzy/one-click-bios",
-  "version": 7,
+  "version": 8,
   "shell-version": [
-    "46", "47"
+    "46", "47", "48"
   ]
 }
