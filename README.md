@@ -5,7 +5,7 @@ A GNOME extension that allows you to restart into firmware settings directly fro
 
 | Current Support | Historical Support[^1] |
 |-----------------|------------------------|
-| 46, 47          | 43                     |
+| 46, 47, 48      | 43                     |
 
 [<img alt="Get it on GNOME Extensions" height="90" src="https://raw.githubusercontent.com/andyholmes/gnome-shell-extensions-badge/master/get-it-on-ego.svg?sanitize=true">](https://extensions.gnome.org/extension/5733/one-click-bios/)
 
