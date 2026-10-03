@@ -22,7 +22,6 @@ import Clutter from "gi://Clutter";
 
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
-import * as SystemActions from 'resource:///org/gnome/shell/misc/systemActions.js';
 
 const RESTART_ACTION_INDEX = 1;
 const FIND_SYS_MENU_TIMEOUT = 1000;
