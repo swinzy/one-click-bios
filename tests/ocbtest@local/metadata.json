@@ -1,0 +1,8 @@
+{
+  "name": "One-Click BIOS Test",
+  "description": "Test harness for One-Click BIOS. Used by tests/run.sh only.",
+  "uuid": "ocbtest@local",
+  "shell-version": [
+    "46", "47", "48", "49", "50", "51"
+  ]
+}

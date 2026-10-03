@@ -1,0 +1,4 @@
+#!/bin/sh
+# Fake systemctl for tests: records reboot requests, never reboots.
+case "$*" in *reboot*) echo "$@" >> "$OCB_TEST_DIR/systemctl.log" ;; esac
+exit 0
