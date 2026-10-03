@@ -16,12 +16,11 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-import Gio from "gi://Gio";
+
 import GLib from "gi://GLib";
 import Clutter from "gi://Clutter";
 
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
-import * as QuickSettings from "resource:///org/gnome/shell/ui/quickSettings.js";
 import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
 import * as SystemActions from 'resource:///org/gnome/shell/misc/systemActions.js';
 
@@ -32,7 +31,7 @@ const FIND_SYS_MENU_MAX_RETRY = 30;
 export default class OneClickBios extends Extension {
     constructor(metadata) {
         super(metadata);
-        this._indicator = null;
+        this._restartAction = null;
     }
 
     enable() {
@@ -52,7 +51,7 @@ export default class OneClickBios extends Extension {
             this._hSysMenuTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, FIND_SYS_MENU_TIMEOUT, () => {
                 // If too many retries
                 if (tries >= FIND_SYS_MENU_MAX_RETRY) {
-                    throw new Error("Cannot find system menu.");
+                    console.error(`${this.metadata.name}: Cannot find system menu.`);
                     this._hSysMenuTimer = null;
                     return false;
                 }
@@ -86,25 +85,32 @@ export default class OneClickBios extends Extension {
                 break;
             }
         }
+        if (!powerMenu) {
+            console.error(`${this.metadata.name}: Cannot find power menu.`);
+            return;
+        }
+
         // Find "Restart..." action.
         // Because these actions are dynamically populated with no id defined. We can only assume the index will not change.
         // String matching is not feasible due to i18n.
-        this._restartAction = powerMenu._getMenuItems()[RESTART_ACTION_INDEX];
+        const restartAction = powerMenu._getMenuItems()[RESTART_ACTION_INDEX];
+        if (!restartAction) {
+            console.error(`${this.metadata.name}: Cannot find restart action.`);
+            return;
+        }
+        this._restartAction = restartAction;
 
-        // Disable original click action and use our custom press event instead
-        this._restartAction._clickAction.enabled = false;
-        this._restartClickEventId = this._restartAction.connect(
-            "button-press-event",
-            this.restartActionClicked
-        );
+        // Override activate() on this item only. Both clicks and keyboard activation go through it
+        // on all supported versions, so we don't depend on how the item handles input internally
+        // (Clutter.ClickAction before GNOME 49, Clutter.ClickGesture since).
+        this._restartAction.activate = event => this._onRestartActivated(event);
     }
 
     disable() {
-        // Revert original behaviour
+        // Revert original behaviour by removing the override, which exposes the prototype's activate() again
         if (this._restartAction) {
-            this._restartAction.disconnect(this._restartClickEventId);
-            this._restartClickEventId = null;
-            this._restartAction._clickAction.enabled = true;
+            delete this._restartAction.activate;
+            this._restartAction = null;
         }
 
         // Destroy timer, if any
@@ -114,13 +120,13 @@ export default class OneClickBios extends Extension {
         }
     }
 
-    restartActionClicked(_widget, event) {
-        if (event.get_state() & Clutter.ModifierType.SHIFT_MASK) {
-            GLib.spawn_command_line_async("systemctl reboot --firmware");
+    _onRestartActivated(event) {
+        if (event?.get_state() & Clutter.ModifierType.SHIFT_MASK) {
+            Main.panel.closeQuickSettings();
+            GLib.spawn_command_line_async("systemctl reboot --firmware-setup");
         } else {
-            const systemActions = new SystemActions.getDefault();
-            systemActions.activateRestart();
+            // Original behaviour: emits "activate", which shows the restart dialog and closes the menu
+            Object.getPrototypeOf(this._restartAction).activate.call(this._restartAction, event);
         }
     }
 }
-
