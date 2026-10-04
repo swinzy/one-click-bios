@@ -5,6 +5,8 @@
 # temporary, and a fake systemctl records reboot requests instead of rebooting.
 #
 # Usage: tests/run.sh
+# Set OCB_SCREENSHOT_DIR to an existing directory to also save screenshots of the
+# menu and the confirmation dialog; LANG is passed through to the shell.
 # Exit status is 0 if all checks pass.
 set -u
 

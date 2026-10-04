@@ -8,8 +8,10 @@
  * PATH, and the original restart path (activateRestart) is stubbed below.
  */
 
+import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import Clutter from "gi://Clutter";
+import Shell from "gi://Shell";
 
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import * as Config from "resource:///org/gnome/shell/misc/config.js";
@@ -18,6 +20,8 @@ import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
 
 const UUID = "oneclickbios@sao.studio";
 const DIR = GLib.getenv("OCB_TEST_DIR");
+// Set to save screenshots of the UI under test (e.g. to review the dialog)
+const SCREENSHOT_DIR = GLib.getenv("OCB_SCREENSHOT_DIR");
 const SHELL_MAJOR = parseInt(Config.PACKAGE_VERSION.split(".")[0]);
 const FIRMWARE_CMD = "reboot --firmware-setup";
 const FIRMWARE_LABEL = "Restart into Firmware Settings…";
@@ -49,6 +53,24 @@ function readLog() {
 }
 
 const firmwareCount = () => readLog().split("\n").filter(l => l === FIRMWARE_CMD).length;
+
+async function screenshot(name) {
+    if (!SCREENSHOT_DIR)
+        return;
+
+    const path = `${SCREENSHOT_DIR}/${name}.png`;
+    const stream = Gio.File.new_for_path(path).replace(null, false, Gio.FileCreateFlags.NONE, null);
+    // Shell.Screenshot.screenshot() is promisified by GNOME Shell's screenshot UI
+    await new Shell.Screenshot().screenshot(false, stream);
+    stream.close(null);
+    log(`screenshot saved: ${path}`);
+}
+
+// The extension's confirmation dialog, if one is open
+function findDialog() {
+    return Main.layoutManager.modalDialogGroup.get_children()
+        .find(c => c.constructor.name === "FirmwareDialog" && c.mapped) ?? null;
+}
 
 function findItems() {
     const systemItem = Main.panel.statusArea.quickSettings._system._systemItem;
@@ -144,6 +166,22 @@ export default class OneClickBiosTest extends Extension {
         await sleep(300);
     }
 
+    async _pressKey(keyval) {
+        const now = () => GLib.get_monotonic_time();
+        this._keyboard.notify_keyval(now(), keyval, Clutter.KeyState.PRESSED);
+        await sleep(100);
+        this._keyboard.notify_keyval(now(), keyval, Clutter.KeyState.RELEASED);
+        await sleep(700);
+    }
+
+    // Waits for the dialog to open after a Shift activation, so key presses reach it
+    async _waitForDialog() {
+        for (let i = 0; i < 20 && !findDialog(); i++)
+            await sleep(100);
+        await sleep(500);
+        return findDialog();
+    }
+
     async _pressReturn(actor, shift = false) {
         const now = () => GLib.get_monotonic_time();
 
@@ -197,12 +235,20 @@ export default class OneClickBiosTest extends Extension {
         let { restart } = findItems();
         check("override installed", Object.hasOwn(restart, "activate"));
 
-        // 1. Shift + click: restart into firmware
+        // 1. Shift + click: asks first; Escape cancels
         restart = await this._openPowerMenu();
         await this._click(restart, true);
-        check("shift+click runs systemctl reboot --firmware-setup", firmwareCount() === 1, `log="${readLog()}"`);
-        check("shift+click does not call activateRestart", restartCalls === 0, `calls=${restartCalls}`);
+        let dialog = await this._waitForDialog();
+        check("shift+click opens the confirmation dialog", dialog !== null);
+        await screenshot("dialog");
         check("shift+click closes quick settings", !Main.panel.statusArea.quickSettings.menu.isOpen);
+        check("dialog shows the countdown", dialog?._content.description.includes("60 seconds") ?? false,
+            `description="${dialog?._content.description}"`);
+        check("shift+click does not restart yet", firmwareCount() === 0 && restartCalls === 0,
+            `calls=${restartCalls} log="${readLog()}"`);
+        await this._pressKey(Clutter.KEY_Escape);
+        check("Escape closes the dialog", findDialog() === null);
+        check("Escape does not restart", firmwareCount() === 0, `log="${readLog()}"`);
 
         // 2. Plain click: original restart. Shift was still held when the menu closed in step 1,
         // so this also checks that the label was restored.
@@ -211,7 +257,7 @@ export default class OneClickBiosTest extends Extension {
         check("label is original without Shift", originalLabel !== FIRMWARE_LABEL, `label="${originalLabel}"`);
         await this._click(restart, false);
         check("plain click calls activateRestart", restartCalls === 1, `calls=${restartCalls}`);
-        check("plain click does not run systemctl", firmwareCount() === 1, `log="${readLog()}"`);
+        check("plain click does not open the dialog", findDialog() === null);
         check("plain click closes quick settings", !Main.panel.statusArea.quickSettings.menu.isOpen);
 
         // 3. Keyboard: original restart
@@ -223,18 +269,42 @@ export default class OneClickBiosTest extends Extension {
         restart = await this._openPowerMenu();
         await this._setShift(true);
         check("label changes while Shift is held", restart.label.text === FIRMWARE_LABEL, `label="${restart.label.text}"`);
+        await screenshot("menu-shift");
         await this._setShift(false);
         check("label reverts when Shift is released", restart.label.text === originalLabel, `label="${restart.label.text}"`);
 
-        // 5. Shift + Return: restart into firmware
+        // 5. Shift + Return opens the dialog; Return confirms
         await this._pressReturn(restart, true);
-        check("shift+Return runs systemctl reboot --firmware-setup", firmwareCount() === 2, `log="${readLog()}"`);
+        dialog = await this._waitForDialog();
+        check("shift+Return opens the confirmation dialog", dialog !== null);
         check("shift+Return does not call activateRestart", restartCalls === 2, `calls=${restartCalls}`);
-        check("shift+Return closes quick settings", !Main.panel.statusArea.quickSettings.menu.isOpen);
+        await this._pressKey(Clutter.KEY_Return);
+        check("Return in the dialog runs systemctl reboot --firmware-setup", firmwareCount() === 1, `log="${readLog()}"`);
+        check("dialog closes after confirming", findDialog() === null);
 
-        // 6. Disabled: override removed, label untouched, shift + click uses the original restart
+        // 6. The countdown restarts automatically (shortened to 2 seconds)
+        restart = await this._openPowerMenu();
+        await this._click(restart, true);
+        dialog = await this._waitForDialog();
+        if (dialog)
+            dialog._totalSeconds = 2;
+        await sleep(3500);
+        check("countdown runs systemctl reboot --firmware-setup", firmwareCount() === 2, `log="${readLog()}"`);
+        check("dialog closes after the countdown", findDialog() === null);
+
+        // 7. Disabling the extension while the dialog is open cancels it
+        restart = await this._openPowerMenu();
+        await this._click(restart, true);
+        dialog = await this._waitForDialog();
+        check("dialog open before disabling", dialog !== null);
+        if (dialog)
+            dialog._totalSeconds = 2;
         await Main.extensionManager.disableExtension(UUID);
-        await sleep(500);
+        await sleep(3500);
+        check("disable closes the dialog", findDialog() === null);
+        check("disable cancels the countdown", firmwareCount() === 2, `log="${readLog()}"`);
+
+        // 8. Disabled: override removed, label untouched, shift + click uses the original restart
         ({ restart } = findItems());
         check("override removed on disable", !Object.hasOwn(restart, "activate"));
         restart = await this._openPowerMenu();
@@ -242,17 +312,20 @@ export default class OneClickBiosTest extends Extension {
         check("disabled: label stays original with Shift", restart.label.text === originalLabel, `label="${restart.label.text}"`);
         await this._setShift(false);
         await this._click(restart, true);
-        check("disabled: shift+click uses original restart", restartCalls === 3 && firmwareCount() === 2,
+        check("disabled: shift+click uses original restart", restartCalls === 3 && firmwareCount() === 2 && findDialog() === null,
             `calls=${restartCalls} log="${readLog()}"`);
 
-        // 7. Re-enabled: works again
+        // 9. Re-enabled: works again
         await Main.extensionManager.enableExtension(UUID);
         await sleep(500);
         ({ restart } = findItems());
         check("override reinstalled on re-enable", Object.hasOwn(restart, "activate"));
         restart = await this._openPowerMenu();
         await this._click(restart, true);
-        check("re-enabled: shift+click runs systemctl again", firmwareCount() === 3, `log="${readLog()}"`);
+        dialog = await this._waitForDialog();
+        check("re-enabled: shift+click opens the dialog", dialog !== null);
+        await this._pressKey(Clutter.KEY_Return);
+        check("re-enabled: confirming runs systemctl again", firmwareCount() === 3, `log="${readLog()}"`);
 
         Main.panel.closeQuickSettings();
         this._finish();
