@@ -1,0 +1,90 @@
+# Creates a GitHub release for the version in metadata.json.
+# Run it manually from the Actions tab once that version has passed the
+# extensions.gnome.org review and is on main.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      changes:
+        description: "What's Changed items, separated by ';'"
+        required: true
+        type: string
+      draft:
+        description: "Create as a draft release"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  EXTENSION_DIR: oneclickbios@sao.studio
+  ASSET_NAME: oneclickbios@sao.studio.zip
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only release from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Releases are only made from main (got ${GITHUB_REF})."
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - name: Read metadata
+        id: meta
+        run: |
+          version=$(jq -er '.version' "$EXTENSION_DIR/metadata.json")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "Version $version, shell versions: $(jq -r '."shell-version" | join(", ")' "$EXTENSION_DIR/metadata.json")"
+
+      - name: Check the tag does not exist yet
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1 || git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            echo "::error::$TAG already exists. Bump \"version\" in metadata.json first."
+            exit 1
+          fi
+
+      - name: Pack extension
+        run: |
+          mkdir -p dist
+          (cd "$EXTENSION_DIR" && zip -X -r "../dist/$ASSET_NAME" .)
+          unzip -l "dist/$ASSET_NAME"
+
+      - name: Write release notes
+        env:
+          CHANGES: ${{ inputs.changes }}
+        run: |
+          {
+            echo "## What's Changed"
+            printf '%s\n' "$CHANGES" | tr ';' '\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d' -e 's/^/- /'
+            echo
+            echo "## Compatible Shell"
+            jq -r '."shell-version"[] | "- \(.)"' "$EXTENSION_DIR/metadata.json"
+          } > notes.md
+          cat notes.md
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          DRAFT: ${{ inputs.draft }}
+        run: |
+          draft_flag=()
+          if [ "$DRAFT" = "true" ]; then
+            draft_flag=(--draft)
+          fi
+          gh release create "$TAG" "dist/$ASSET_NAME" \
+            --target "$GITHUB_SHA" \
+            --title "Version $VERSION" \
+            --notes-file notes.md \
+            "${draft_flag[@]}"
