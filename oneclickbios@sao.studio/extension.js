@@ -26,11 +26,17 @@ import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
 const RESTART_ACTION_INDEX = 1;
 const FIND_SYS_MENU_TIMEOUT = 1000;
 const FIND_SYS_MENU_MAX_RETRY = 30;
+const SHIFT_POLL_INTERVAL = 50;
+
+// TODO: Translate
+const FIRMWARE_LABEL = "Restart into Firmware Settings…";
+const ACTIVATE_KEYS = [Clutter.KEY_Return, Clutter.KEY_KP_Enter, Clutter.KEY_space];
 
 export default class OneClickBios extends Extension {
     constructor(metadata) {
         super(metadata);
         this._restartAction = null;
+        this._originalLabel = null;
     }
 
     enable() {
@@ -103,12 +109,28 @@ export default class OneClickBios extends Extension {
         // on all supported versions, so we don't depend on how the item handles input internally
         // (Clutter.ClickAction before GNOME 49, Clutter.ClickGesture since).
         this._restartAction.activate = event => this._onRestartActivated(event);
+
+        // GNOME Shell only activates menu items from the keyboard when no modifier is held,
+        // so handle Shift + Enter / Space ourselves
+        this._restartKeyPressId = this._restartAction.connect(
+            "key-press-event",
+            (_actor, event) => this._onRestartKeyPress(event)
+        );
+
+        // While the item is on screen, show what it will do when Shift is held.
+        // There is no modifier-change signal that works on all supported versions, so poll.
+        this._originalLabel = this._restartAction.label.text;
+        this._restartMappedId = this._restartAction.connect("notify::mapped", () => this._syncShiftPolling());
+        this._syncShiftPolling();
     }
 
     disable() {
         // Revert original behaviour by removing the override, which exposes the prototype's activate() again
         if (this._restartAction) {
             delete this._restartAction.activate;
+            this._restartAction.disconnect(this._restartKeyPressId);
+            this._restartAction.disconnect(this._restartMappedId);
+            this._stopShiftPolling();
             this._restartAction = null;
         }
 
@@ -119,10 +141,51 @@ export default class OneClickBios extends Extension {
         }
     }
 
+    _syncShiftPolling() {
+        if (this._restartAction.mapped) {
+            if (!this._hShiftPollTimer) {
+                this._hShiftPollTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SHIFT_POLL_INTERVAL, () => {
+                    this._updateLabel();
+                    return true;
+                });
+            }
+            this._updateLabel();
+        } else {
+            this._stopShiftPolling();
+        }
+    }
+
+    _stopShiftPolling() {
+        if (this._hShiftPollTimer) {
+            GLib.source_remove(this._hShiftPollTimer);
+            this._hShiftPollTimer = null;
+        }
+        this._restartAction.label.text = this._originalLabel;
+    }
+
+    _updateLabel() {
+        const [, , mods] = global.get_pointer();
+        const text = mods & Clutter.ModifierType.SHIFT_MASK ? FIRMWARE_LABEL : this._originalLabel;
+        if (this._restartAction.label.text !== text)
+            this._restartAction.label.text = text;
+    }
+
+    _onRestartKeyPress(event) {
+        if ((event.get_state() & Clutter.ModifierType.SHIFT_MASK) && ACTIVATE_KEYS.includes(event.get_key_symbol())) {
+            this._restartIntoFirmware();
+            return Clutter.EVENT_STOP;
+        }
+        return Clutter.EVENT_PROPAGATE;
+    }
+
+    _restartIntoFirmware() {
+        Main.panel.closeQuickSettings();
+        GLib.spawn_command_line_async("systemctl reboot --firmware-setup");
+    }
+
     _onRestartActivated(event) {
         if (event?.get_state() & Clutter.ModifierType.SHIFT_MASK) {
-            Main.panel.closeQuickSettings();
-            GLib.spawn_command_line_async("systemctl reboot --firmware-setup");
+            this._restartIntoFirmware();
         } else {
             // Original behaviour: emits "activate", which shows the restart dialog and closes the menu
             Object.getPrototypeOf(this._restartAction).activate.call(this._restartAction, event);

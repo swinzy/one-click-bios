@@ -20,6 +20,7 @@ const UUID = "oneclickbios@sao.studio";
 const DIR = GLib.getenv("OCB_TEST_DIR");
 const SHELL_MAJOR = parseInt(Config.PACKAGE_VERSION.split(".")[0]);
 const FIRMWARE_CMD = "reboot --firmware-setup";
+const FIRMWARE_LABEL = "Restart into Firmware Settings…";
 
 const results = [];
 // Disabling the extension under test also reloads extensions enabled after it, including this one
@@ -136,15 +137,27 @@ export default class OneClickBiosTest extends Extension {
         await sleep(500);
     }
 
-    async _pressReturn(actor) {
+    async _setShift(pressed) {
+        this._keyboard.notify_keyval(GLib.get_monotonic_time(), Clutter.KEY_Shift_L,
+            pressed ? Clutter.KeyState.PRESSED : Clutter.KeyState.RELEASED);
+        // Longer than the extension's Shift polling interval
+        await sleep(300);
+    }
+
+    async _pressReturn(actor, shift = false) {
         const now = () => GLib.get_monotonic_time();
 
         actor.grab_key_focus();
         await sleep(200);
+        if (shift)
+            await this._setShift(true);
         this._keyboard.notify_keyval(now(), Clutter.KEY_Return, Clutter.KeyState.PRESSED);
         await sleep(100);
         this._keyboard.notify_keyval(now(), Clutter.KEY_Return, Clutter.KeyState.RELEASED);
-        await sleep(500);
+        await sleep(100);
+        if (shift)
+            await this._setShift(false);
+        await sleep(400);
     }
 
     async _run() {
@@ -191,8 +204,11 @@ export default class OneClickBiosTest extends Extension {
         check("shift+click does not call activateRestart", restartCalls === 0, `calls=${restartCalls}`);
         check("shift+click closes quick settings", !Main.panel.statusArea.quickSettings.menu.isOpen);
 
-        // 2. Plain click: original restart
+        // 2. Plain click: original restart. Shift was still held when the menu closed in step 1,
+        // so this also checks that the label was restored.
         restart = await this._openPowerMenu();
+        const originalLabel = restart.label.text;
+        check("label is original without Shift", originalLabel !== FIRMWARE_LABEL, `label="${originalLabel}"`);
         await this._click(restart, false);
         check("plain click calls activateRestart", restartCalls === 1, `calls=${restartCalls}`);
         check("plain click does not run systemctl", firmwareCount() === 1, `log="${readLog()}"`);
@@ -203,24 +219,40 @@ export default class OneClickBiosTest extends Extension {
         await this._pressReturn(restart);
         check("Return key calls activateRestart", restartCalls === 2, `calls=${restartCalls}`);
 
-        // 4. Disabled: override removed, shift + click uses the original restart
+        // 4. Label follows Shift while the menu is open
+        restart = await this._openPowerMenu();
+        await this._setShift(true);
+        check("label changes while Shift is held", restart.label.text === FIRMWARE_LABEL, `label="${restart.label.text}"`);
+        await this._setShift(false);
+        check("label reverts when Shift is released", restart.label.text === originalLabel, `label="${restart.label.text}"`);
+
+        // 5. Shift + Return: restart into firmware
+        await this._pressReturn(restart, true);
+        check("shift+Return runs systemctl reboot --firmware-setup", firmwareCount() === 2, `log="${readLog()}"`);
+        check("shift+Return does not call activateRestart", restartCalls === 2, `calls=${restartCalls}`);
+        check("shift+Return closes quick settings", !Main.panel.statusArea.quickSettings.menu.isOpen);
+
+        // 6. Disabled: override removed, label untouched, shift + click uses the original restart
         await Main.extensionManager.disableExtension(UUID);
         await sleep(500);
         ({ restart } = findItems());
         check("override removed on disable", !Object.hasOwn(restart, "activate"));
         restart = await this._openPowerMenu();
+        await this._setShift(true);
+        check("disabled: label stays original with Shift", restart.label.text === originalLabel, `label="${restart.label.text}"`);
+        await this._setShift(false);
         await this._click(restart, true);
-        check("disabled: shift+click uses original restart", restartCalls === 3 && firmwareCount() === 1,
+        check("disabled: shift+click uses original restart", restartCalls === 3 && firmwareCount() === 2,
             `calls=${restartCalls} log="${readLog()}"`);
 
-        // 5. Re-enabled: works again
+        // 7. Re-enabled: works again
         await Main.extensionManager.enableExtension(UUID);
         await sleep(500);
         ({ restart } = findItems());
         check("override reinstalled on re-enable", Object.hasOwn(restart, "activate"));
         restart = await this._openPowerMenu();
         await this._click(restart, true);
-        check("re-enabled: shift+click runs systemctl again", firmwareCount() === 2, `log="${readLog()}"`);
+        check("re-enabled: shift+click runs systemctl again", firmwareCount() === 3, `log="${readLog()}"`);
 
         Main.panel.closeQuickSettings();
         this._finish();

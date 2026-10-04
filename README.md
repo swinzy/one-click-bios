@@ -11,8 +11,9 @@ A GNOME extension that allows you to restart into firmware settings directly fro
 
 ## Usage:
 1. Open the power menu as usual
-2. Hold <kbd>Shift</kbd> and click the "Restart..."
-3. The computer will now restart straight into your BIOS/UEFI settings automatically!
+2. Hold <kbd>Shift</kbd>: "Restart…" changes to "Restart into Firmware Settings…"
+3. Click it, or press <kbd>Enter</kbd> while it is selected
+4. The computer will now restart straight into your BIOS/UEFI settings automatically!
 
 ## Supported GNOME versions
 At a minimum, this extension supports the GNOME versions shipped by:
