@@ -95,15 +95,16 @@ export default class OneClickBiosTest extends Extension {
         await sleep(300);
 
         for (let i = 0; i < 20 && !restart.mapped; i++) {
-            // The isolated session has no logind session, so can-restart is false and these items are
-            // hidden. Opening quick settings runs forceUpdate(), which hides them again, so force them here.
-            shutdownItem.visible = true;
-            restart.visible = true;
             openWithoutAnimation(shutdownItem.menu);
             await sleep(300);
         }
-        if (!restart.mapped)
-            log("power menu did not open");
+        if (!restart.mapped) {
+            const qs = Main.panel.statusArea.quickSettings;
+            log(`power menu did not open: qsOpen=${qs.menu.isOpen} shutdownItem.visible=${shutdownItem.visible} ` +
+                `shutdownItem.mapped=${shutdownItem.mapped} powerMenuOpen=${shutdownItem.menu.isOpen} ` +
+                `restart.visible=${restart.visible} sessionMode=${Main.sessionMode.currentMode} ` +
+                `locked=${Main.sessionMode.isLocked}`);
+        }
         await sleep(500);
         return restart;
     }
@@ -113,8 +114,15 @@ export default class OneClickBiosTest extends Extension {
         const [w, h] = actor.get_transformed_size();
         const now = () => GLib.get_monotonic_time();
 
-        this._pointer.notify_absolute_motion(now(), x + w / 2, y + h / 2);
-        await sleep(200);
+        // The first motion of a session can land elsewhere (seen at y=0), so retry until the pointer is there
+        const [cx, cy] = [Math.round(x + w / 2), Math.round(y + h / 2)];
+        for (let i = 0; i < 10; i++) {
+            this._pointer.notify_absolute_motion(now(), cx, cy);
+            await sleep(200);
+            const [px, py] = global.get_pointer();
+            if (Math.abs(px - cx) <= 1 && Math.abs(py - cy) <= 1)
+                break;
+        }
         if (shift) {
             this._keyboard.notify_keyval(now(), Clutter.KEY_Shift_L, Clutter.KeyState.PRESSED);
             await sleep(100);
@@ -143,8 +151,18 @@ export default class OneClickBiosTest extends Extension {
         log(`GNOME Shell ${Config.PACKAGE_VERSION}`);
 
         // Stub the original restart path so it only counts calls
+        const systemActions = SystemActions.getDefault();
         let restartCalls = 0;
-        SystemActions.getDefault().activateRestart = () => restartCalls++;
+        systemActions.activateRestart = () => restartCalls++;
+
+        // The isolated session has no logind session, so logind reports that it cannot reboot and the
+        // restart item is hidden. Pin the restart action as available; a pending or later update from
+        // logind then has no effect.
+        Object.defineProperty(systemActions._actions.get("restart"), "available", {
+            get: () => true,
+            set: () => {},
+        });
+        systemActions.notify("can-restart");
 
         // Wait for the extension under test
         for (let i = 0; i < 50 && Main.extensionManager.lookup(UUID)?.state !== 1; i++)
