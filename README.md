@@ -1,5 +1,8 @@
 # One-Click BIOS
-<img src="./Banner.png" height="256" />
+<p>
+  <img src="./screenshots/menu-shift.png" height="200" alt="Holding Shift turns &quot;Restart…&quot; into &quot;Restart into Firmware Settings…&quot;" />
+  <img src="./screenshots/dialog.png" height="200" alt="Confirmation dialog with a 60-second countdown" />
+</p>
 
 A GNOME extension that allows you to restart into firmware settings directly from OS.<br>
 
@@ -28,6 +31,11 @@ The supported range is from the oldest GNOME version to the latest GNOME version
 
 ## Translations
 Translations live in [`po/`](po/). Currently available: Chinese (Simplified, `zh_CN`) and Chinese (Traditional, `zh_TW`).
+
+<p>
+  <img src="./screenshots/menu-shift-zh_CN.png" height="200" alt="The menu with Shift held, in Simplified Chinese" />
+  <img src="./screenshots/dialog-zh_CN.png" height="200" alt="The confirmation dialog in Simplified Chinese" />
+</p>
 
 To add or update one:
 1. Run `tools/update-pot.sh` to refresh the template and existing translations
