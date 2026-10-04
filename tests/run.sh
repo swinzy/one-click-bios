@@ -9,6 +9,8 @@
 # Usage: tests/run.sh
 # Set OCB_SCREENSHOT_DIR to an existing directory to also save screenshots of the
 # menu and the confirmation dialog; LANG is passed through to the shell.
+# Set OCB_EXPECT_TRANSLATED=1 with a LANG the extension has a translation for,
+# e.g. LANG=zh_CN.UTF-8 OCB_EXPECT_TRANSLATED=1 tests/run.sh
 # Exit status is 0 if all checks pass.
 set -u
 

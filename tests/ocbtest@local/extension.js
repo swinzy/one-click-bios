@@ -12,6 +12,7 @@ import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import Clutter from "gi://Clutter";
 import Shell from "gi://Shell";
+import Gettext from "gettext";
 
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import * as Config from "resource:///org/gnome/shell/misc/config.js";
@@ -24,7 +25,16 @@ const DIR = GLib.getenv("OCB_TEST_DIR");
 const SCREENSHOT_DIR = GLib.getenv("OCB_SCREENSHOT_DIR");
 const SHELL_MAJOR = parseInt(Config.PACKAGE_VERSION.split(".")[0]);
 const FIRMWARE_CMD = "reboot --firmware-setup";
-const FIRMWARE_LABEL = "Restart into Firmware Settings…";
+// Expected texts in the current locale, from the extension's own translations
+const DOMAIN = "oneclickbios@sao.studio";
+const FIRMWARE_LABEL_SOURCE = "Restart into Firmware Settings…";
+const FIRMWARE_LABEL = Gettext.dgettext(DOMAIN, FIRMWARE_LABEL_SOURCE);
+const countdownText = seconds => Gettext.dngettext(DOMAIN,
+    "The system will restart into firmware settings automatically in %d second",
+    "The system will restart into firmware settings automatically in %d seconds",
+    seconds).replace("%d", seconds);
+// Set to 1 when running in a locale the extension has a translation for
+const EXPECT_TRANSLATED = GLib.getenv("OCB_EXPECT_TRANSLATED") === "1";
 
 const results = [];
 // Disabling the extension under test also reloads extensions enabled after it, including this one
@@ -242,7 +252,7 @@ export default class OneClickBiosTest extends Extension {
         check("shift+click opens the confirmation dialog", dialog !== null);
         await screenshot("dialog");
         check("shift+click closes quick settings", !Main.panel.statusArea.quickSettings.menu.isOpen);
-        check("dialog shows the countdown", dialog?._content.description.includes("60 seconds") ?? false,
+        check("dialog shows the countdown", dialog?._content.description === countdownText(60),
             `description="${dialog?._content.description}"`);
         check("shift+click does not restart yet", firmwareCount() === 0 && restartCalls === 0,
             `calls=${restartCalls} log="${readLog()}"`);
@@ -269,6 +279,10 @@ export default class OneClickBiosTest extends Extension {
         restart = await this._openPowerMenu();
         await this._setShift(true);
         check("label changes while Shift is held", restart.label.text === FIRMWARE_LABEL, `label="${restart.label.text}"`);
+        if (EXPECT_TRANSLATED) {
+            check("label is translated", restart.label.text !== FIRMWARE_LABEL_SOURCE, `label="${restart.label.text}"`);
+            check("dialog text is translated", !countdownText(60).startsWith("The system"), `text="${countdownText(60)}"`);
+        }
         await screenshot("menu-shift");
         await this._setShift(false);
         check("label reverts when Shift is released", restart.label.text === originalLabel, `label="${restart.label.text}"`);

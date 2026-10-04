@@ -37,8 +37,8 @@ const SHIFT_POLL_INTERVAL = 50;
 const firmwareLabel = () => _("Restart into Firmware Settings…");
 const firmwareDialogTitle = () => _("Restart into Firmware Settings");
 const firmwareDialogDescription = seconds => ngettext(
-    "The system will restart into firmware settings automatically in %d second.",
-    "The system will restart into firmware settings automatically in %d seconds.",
+    "The system will restart into firmware settings automatically in %d second",
+    "The system will restart into firmware settings automatically in %d seconds",
     seconds).format(seconds);
 const ACTIVATE_KEYS = [Clutter.KEY_Return, Clutter.KEY_KP_Enter, Clutter.KEY_space];
 
