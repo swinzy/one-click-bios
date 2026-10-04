@@ -4,6 +4,8 @@
 # touch the user's real settings: HOME, XDG dirs and the session bus are all
 # temporary, and a fake systemctl records reboot requests instead of rebooting.
 #
+# Needs msgfmt (gettext) to compile translations.
+#
 # Usage: tests/run.sh
 # Set OCB_SCREENSHOT_DIR to an existing directory to also save screenshots of the
 # menu and the confirmation dialog; LANG is passed through to the shell.
@@ -16,7 +18,8 @@ TIMEOUT=120
 
 T=$(mktemp -d "${TMPDIR:-/tmp}/ocb-test.XXXXXX")
 mkdir -p "$T"/{home,config,data/gnome-shell/extensions,cache}
-cp -r "$REPO/oneclickbios@sao.studio" "$T/data/gnome-shell/extensions/"
+# Install what would be packed, including compiled translations
+"$REPO/tools/build.sh" "$T/data/gnome-shell/extensions" || { echo "RESULT: build failed"; exit 1; }
 cp -r "$TESTS/ocbtest@local" "$T/data/gnome-shell/extensions/"
 
 export HOME=$T/home XDG_CONFIG_HOME=$T/config XDG_DATA_HOME=$T/data XDG_CACHE_HOME=$T/cache

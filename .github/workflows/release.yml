@@ -53,11 +53,12 @@ jobs:
             exit 1
           fi
 
+      - name: Install packing tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq gettext zip
+
+      # Same script as for local packing; compiles translations into locale/
       - name: Pack extension
-        run: |
-          mkdir -p dist
-          (cd "$EXTENSION_DIR" && zip -X -r "../dist/$ASSET_NAME" .)
-          unzip -l "dist/$ASSET_NAME"
+        run: tools/pack.sh
 
       - name: Write release notes
         env:

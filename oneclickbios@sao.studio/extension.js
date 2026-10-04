@@ -25,18 +25,21 @@ import Gettext from "gettext";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import * as Dialog from "resource:///org/gnome/shell/ui/dialog.js";
 import * as ModalDialog from "resource:///org/gnome/shell/ui/modalDialog.js";
-import { Extension } from "resource:///org/gnome/shell/extensions/extension.js";
+import { Extension, gettext as _, ngettext } from "resource:///org/gnome/shell/extensions/extension.js";
 
 const RESTART_ACTION_INDEX = 1;
 const FIND_SYS_MENU_TIMEOUT = 1000;
 const FIND_SYS_MENU_MAX_RETRY = 30;
 const SHIFT_POLL_INTERVAL = 50;
 
-// TODO: Translate
-const FIRMWARE_LABEL = "Restart into Firmware Settings…";
-const FIRMWARE_DIALOG_TITLE = "Restart into Firmware Settings";
-const firmwareDialogDescription = seconds =>
-    `The system will restart into firmware settings automatically in ${seconds} ${seconds === 1 ? "second" : "seconds"}.`;
+// Translatable strings are looked up when used, not at module load:
+// the extension's translations are only set up once the extension object exists
+const firmwareLabel = () => _("Restart into Firmware Settings…");
+const firmwareDialogTitle = () => _("Restart into Firmware Settings");
+const firmwareDialogDescription = seconds => ngettext(
+    "The system will restart into firmware settings automatically in %d second.",
+    "The system will restart into firmware settings automatically in %d seconds.",
+    seconds).format(seconds);
 const ACTIVATE_KEYS = [Clutter.KEY_Return, Clutter.KEY_KP_Enter, Clutter.KEY_space];
 
 // Same timeout and countdown steps as the system restart dialog
@@ -69,7 +72,7 @@ class FirmwareDialog extends ModalDialog.ModalDialog {
         this._secondsLeft = this._totalSeconds;
         this._timerId = 0;
 
-        this._content = new Dialog.MessageDialogContent({ title: FIRMWARE_DIALOG_TITLE });
+        this._content = new Dialog.MessageDialogContent({ title: firmwareDialogTitle() });
         this.contentLayout.add_child(this._content);
 
         this.addButton({
@@ -223,6 +226,8 @@ export default class OneClickBios extends Extension {
         // While the item is on screen, show what it will do when Shift is held.
         // There is no modifier-change signal that works on all supported versions, so poll.
         this._originalLabel = this._restartAction.label.text;
+        // Looked up once, as the label is updated many times a second while the menu is open
+        this._firmwareLabel = firmwareLabel();
         this._restartMappedId = this._restartAction.connect("notify::mapped", () => this._syncShiftPolling());
         this._syncShiftPolling();
     }
@@ -271,7 +276,7 @@ export default class OneClickBios extends Extension {
 
     _updateLabel() {
         const [, , mods] = global.get_pointer();
-        const text = mods & Clutter.ModifierType.SHIFT_MASK ? FIRMWARE_LABEL : this._originalLabel;
+        const text = mods & Clutter.ModifierType.SHIFT_MASK ? this._firmwareLabel : this._originalLabel;
         if (this._restartAction.label.text !== text)
             this._restartAction.label.text = text;
     }

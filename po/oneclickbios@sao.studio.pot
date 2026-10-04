@@ -1,0 +1,36 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the One-Click BIOS package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: One-Click BIOS\n"
+"Report-Msgid-Bugs-To: https://github.com/swinzy/one-click-bios/issues\n"
+"POT-Creation-Date: 2026-10-05 04:02+1100\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+
+#: oneclickbios@sao.studio/extension.js:37
+msgid "Restart into Firmware Settings…"
+msgstr ""
+
+#: oneclickbios@sao.studio/extension.js:38
+msgid "Restart into Firmware Settings"
+msgstr ""
+
+#: oneclickbios@sao.studio/extension.js:40
+#, javascript-format
+msgid ""
+"The system will restart into firmware settings automatically in %d second."
+msgid_plural ""
+"The system will restart into firmware settings automatically in %d seconds."
+msgstr[0] ""
+msgstr[1] ""

@@ -26,4 +26,12 @@ At a minimum, this extension supports the GNOME versions shipped by:
 
 The supported range is from the oldest GNOME version to the latest GNOME version used among the above list, and is reviewed whenever one of these distributions has a new release. GNOME versions that are no longer supported can still install the last release of this extension that supported them from GNOME Extensions.
 
+## Translations
+Translations live in [`po/`](po/). To add or update one:
+1. Run `tools/update-pot.sh` to refresh the template and existing translations
+2. Start a new language with `msginit -i po/oneclickbios@sao.studio.pot -o po/<lang>.po -l <lang>`, or edit an existing `po/<lang>.po`
+3. Run `tools/pack.sh` to build `dist/oneclickbios@sao.studio.zip` and install it with `gnome-extensions install --force dist/oneclickbios@sao.studio.zip`
+
+The "Cancel" and "Restart" buttons use GNOME Shell's own translations.
+
 [^1]: Will not receive updates.
