@@ -233,12 +233,14 @@ export default class OneClickBios extends Extension {
     }
 
     disable() {
+        this._removeShiftPollTimer();
+
         // Revert original behaviour by removing the override, which exposes the prototype's activate() again
         if (this._restartAction) {
             delete this._restartAction.activate;
             this._restartAction.disconnect(this._restartKeyPressId);
             this._restartAction.disconnect(this._restartMappedId);
-            this._stopShiftPolling();
+            this._restartAction.label.text = this._originalLabel;
             this._restartAction = null;
         }
 
@@ -262,16 +264,16 @@ export default class OneClickBios extends Extension {
             }
             this._updateLabel();
         } else {
-            this._stopShiftPolling();
+            this._removeShiftPollTimer();
+            this._restartAction.label.text = this._originalLabel;
         }
     }
 
-    _stopShiftPolling() {
+    _removeShiftPollTimer() {
         if (this._hShiftPollTimer) {
             GLib.source_remove(this._hShiftPollTimer);
             this._hShiftPollTimer = null;
         }
-        this._restartAction.label.text = this._originalLabel;
     }
 
     _updateLabel() {

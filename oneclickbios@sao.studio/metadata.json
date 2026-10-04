@@ -4,7 +4,7 @@
   "uuid": "oneclickbios@sao.studio",
   "gettext-domain": "oneclickbios@sao.studio",
   "url": "https://github.com/swinzy/one-click-bios",
-  "version": 10,
+  "version": 11,
   "shell-version": [
     "46", "47", "48", "49", "50", "51"
   ]
