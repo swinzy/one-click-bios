@@ -1,6 +1,6 @@
 {
   "name": "One-Click BIOS",
-  "description": "Restart into firmware settings directly from OS\n\nHold Shift and click \"Restart...\" option to trigger restart into firmware settings.\n\nAny suggestion is appreciated on GitHub!",
+  "description": "Restart into BIOS / UEFI firmware settings directly from OS\n\nHold Shift in power options, \"Restart...\" will become \"Restart into Firmware Settings...\".\n\nAny suggestion is appreciated on GitHub!",
   "uuid": "oneclickbios@sao.studio",
   "gettext-domain": "oneclickbios@sao.studio",
   "url": "https://github.com/swinzy/one-click-bios",
