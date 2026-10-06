@@ -33,7 +33,7 @@ jobs:
           echo "::error::Releases are only made from main (got ${GITHUB_REF})."
           exit 1
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Read metadata
         id: meta
