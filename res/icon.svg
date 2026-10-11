@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="-19.53 -19.53 551.05 551.05">
+  <title>One-Click BIOS</title>
+  <!-- Drawn from scratch: a chip with a pointer. The viewBox leaves 10 px of transparent
+       padding at 256 px. -->
+  <defs>
+    <g id="chip">
+      <rect x="118" y="22" width="26" height="64" rx="13"/>
+      <rect x="118" y="426" width="26" height="64" rx="13"/>
+      <rect x="22" y="118" width="64" height="26" rx="13"/>
+      <rect x="426" y="118" width="64" height="26" rx="13"/>
+      <rect x="168" y="22" width="26" height="64" rx="13"/>
+      <rect x="168" y="426" width="26" height="64" rx="13"/>
+      <rect x="22" y="168" width="64" height="26" rx="13"/>
+      <rect x="426" y="168" width="64" height="26" rx="13"/>
+      <rect x="218" y="22" width="26" height="64" rx="13"/>
+      <rect x="218" y="426" width="26" height="64" rx="13"/>
+      <rect x="22" y="218" width="64" height="26" rx="13"/>
+      <rect x="426" y="218" width="64" height="26" rx="13"/>
+      <rect x="268" y="22" width="26" height="64" rx="13"/>
+      <rect x="268" y="426" width="26" height="64" rx="13"/>
+      <rect x="22" y="268" width="64" height="26" rx="13"/>
+      <rect x="426" y="268" width="64" height="26" rx="13"/>
+      <rect x="318" y="22" width="26" height="64" rx="13"/>
+      <rect x="318" y="426" width="26" height="64" rx="13"/>
+      <rect x="22" y="318" width="64" height="26" rx="13"/>
+      <rect x="426" y="318" width="64" height="26" rx="13"/>
+      <rect x="368" y="22" width="26" height="64" rx="13"/>
+      <rect x="368" y="426" width="26" height="64" rx="13"/>
+      <rect x="22" y="368" width="64" height="26" rx="13"/>
+      <rect x="426" y="368" width="64" height="26" rx="13"/>
+      <rect x="72" y="72" width="368" height="368" rx="64"/>
+    </g>
+  </defs>
+  <!-- White outline, so the chip shows on dark backgrounds -->
+  <use href="#chip" fill="#ffffff" stroke="#ffffff" stroke-width="40" stroke-linejoin="round"/>
+  <use href="#chip" fill="#000000"/>
+  <rect x="132" y="132" width="248" height="248" rx="40" fill="#ffffff"/>
+  <path transform="translate(202 160)" d="M0 0 L0 166 L40 128 L68 186 L96 173 L68 116 L120 116 Z" fill="#000000"/>
+</svg>
