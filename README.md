@@ -32,7 +32,7 @@ At a minimum, this extension supports the GNOME versions shipped by:
 The supported range is from the oldest GNOME version to the latest GNOME version used among the above list, and is reviewed whenever one of these distributions has a new release. GNOME versions that are no longer supported can still install the last release of this extension that supported them from GNOME Extensions.
 
 ## Translations
-Translations live in [`po/`](po/). Currently available: Chinese (Simplified, `zh_CN`) and Chinese (Traditional, `zh_TW`).
+Translations live in [`po/`](po/). Currently available: Chinese (Simplified, `zh_CN`), Chinese (Traditional, `zh_TW`), Spanish (Latin America, `es`) and Spanish (Spain, `es_ES`). Other Spanish locales, such as `es_MX` or `es_AR`, use `es`.
 
 <p>
   <img src="./screenshots/menu-shift-zh_CN.png" height="200" alt="The menu with Shift held, in Simplified Chinese" />
