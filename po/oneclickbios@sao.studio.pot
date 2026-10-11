@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: One-Click BIOS\n"
 "Report-Msgid-Bugs-To: https://github.com/swinzy/one-click-bios/issues\n"
-"POT-Creation-Date: 2026-10-05 04:45+1100\n"
+"POT-Creation-Date: 2026-10-11 23:06+1100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,15 +18,15 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: oneclickbios@sao.studio/extension.js:37
+#: oneclickbios@sao.studio/extension.js:35
 msgid "Restart into Firmware Settings…"
 msgstr ""
 
-#: oneclickbios@sao.studio/extension.js:38
+#: oneclickbios@sao.studio/extension.js:36
 msgid "Restart into Firmware Settings"
 msgstr ""
 
-#: oneclickbios@sao.studio/extension.js:40
+#: oneclickbios@sao.studio/extension.js:38
 #, javascript-format
 msgid ""
 "The system will restart into firmware settings automatically in %d second"
@@ -34,3 +34,15 @@ msgid_plural ""
 "The system will restart into firmware settings automatically in %d seconds"
 msgstr[0] ""
 msgstr[1] ""
+
+#: oneclickbios@sao.studio/extension.js:41
+msgid "This computer does not support restarting into firmware settings"
+msgstr ""
+
+#: oneclickbios@sao.studio/extension.js:42
+msgid "Restarting into firmware settings is not allowed"
+msgstr ""
+
+#: oneclickbios@sao.studio/extension.js:43
+msgid "Could not restart into firmware settings"
+msgstr ""

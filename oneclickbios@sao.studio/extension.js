@@ -17,13 +17,11 @@
  */
 
 
+import Gio from "gi://Gio";
 import GLib from "gi://GLib";
-import GObject from "gi://GObject";
 import Clutter from "gi://Clutter";
-import Gettext from "gettext";
 
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
-import * as Dialog from "resource:///org/gnome/shell/ui/dialog.js";
 import * as ModalDialog from "resource:///org/gnome/shell/ui/modalDialog.js";
 import { Extension, gettext as _, ngettext } from "resource:///org/gnome/shell/extensions/extension.js";
 
@@ -40,15 +38,20 @@ const firmwareDialogDescription = seconds => ngettext(
     "The system will restart into firmware settings automatically in %d second",
     "The system will restart into firmware settings automatically in %d seconds",
     seconds).format(seconds);
+const notSupportedError = () => _("This computer does not support restarting into firmware settings");
+const notAllowedError = () => _("Restarting into firmware settings is not allowed");
+const firmwareSetupFailedTitle = () => _("Could not restart into firmware settings");
 const ACTIVATE_KEYS = [Clutter.KEY_Return, Clutter.KEY_KP_Enter, Clutter.KEY_space];
 
-// Same timeout and countdown steps as the system restart dialog
-const FIRMWARE_DIALOG_TIMEOUT = 60;
-const FIRMWARE_DIALOG_INTERVAL = 10;
-
-// Button labels come from GNOME Shell's own translations
-const shellGettext = msgid => Gettext.dgettext("gnome-shell", msgid);
-const shellPgettext = (context, msgid) => Gettext.dpgettext("gnome-shell", context, msgid);
+// The dialog type gnome-session asks GNOME Shell's end session dialog for when restarting
+const DIALOG_TYPE_RESTART = 2;
+// Same countdown steps as the system restart dialog
+const DIALOG_INTERVAL = 10;
+// How long a restart request waits for gnome-session to open the restart dialog
+const FIRMWARE_REQUEST_TIMEOUT = 10 * GLib.USEC_PER_SEC;
+const LOGIND_CALL_TIMEOUT = 5000;
+// Long enough to type a password when logind asks for authentication
+const LOGIND_AUTH_CALL_TIMEOUT = GLib.MAXINT32;
 
 // Same rounding as the system restart dialog: steps of `interval`, then counting down by 1
 function roundSecondsToInterval(totalSeconds, secondsLeft, interval) {
@@ -62,96 +65,71 @@ function roundSecondsToInterval(totalSeconds, secondsLeft, interval) {
     return time - time % interval;
 }
 
-const FirmwareDialog = GObject.registerClass(
-class FirmwareDialog extends ModalDialog.ModalDialog {
-    _init(onConfirm) {
-        super._init({ styleClass: "end-session-dialog", destroyOnClose: true });
+// Calls a method of systemd-logind, which may ask for authentication
+async function callLogind(method, parameters, timeout, cancellable) {
+    const reply = await Gio.DBus.system.call(
+        "org.freedesktop.login1",
+        "/org/freedesktop/login1",
+        "org.freedesktop.login1.Manager",
+        method,
+        parameters,
+        null,
+        Gio.DBusCallFlags.ALLOW_INTERACTIVE_AUTHORIZATION,
+        timeout,
+        cancellable);
+    return reply.deepUnpack();
+}
 
-        this._onConfirm = onConfirm;
-        this._totalSeconds = FIRMWARE_DIALOG_TIMEOUT;
-        this._secondsLeft = this._totalSeconds;
-        this._timerId = 0;
+// Makes the next boot (or not) go into the firmware setup, like `systemctl reboot --firmware-setup`
+function setRebootToFirmwareSetup(enabled, cancellable = null) {
+    return callLogind("SetRebootToFirmwareSetup", new GLib.Variant("(b)", [enabled]),
+        LOGIND_AUTH_CALL_TIMEOUT, cancellable);
+}
 
-        this._content = new Dialog.MessageDialogContent({ title: firmwareDialogTitle() });
-        this.contentLayout.add_child(this._content);
-
-        this.addButton({
-            action: () => this.close(),
-            label: shellGettext("Cancel"),
-            key: Clutter.KEY_Escape,
-        });
-        this.addButton({
-            action: () => this._confirm(),
-            label: shellPgettext("button", "Restart"),
-            default: true,
-        });
-
-        this.connect("destroy", () => this._stopTimer());
-    }
-
-    open() {
-        if (!super.open())
-            return false;
-
-        this._startTimer();
-        this._sync();
-        return true;
-    }
-
-    close() {
-        this._stopTimer();
-        super.close();
-    }
-
-    _confirm() {
-        this.close();
-        this._onConfirm();
-    }
-
-    _sync() {
-        const seconds = roundSecondsToInterval(this._totalSeconds, this._secondsLeft, FIRMWARE_DIALOG_INTERVAL);
-        this._content.description = firmwareDialogDescription(seconds);
-    }
-
-    _startTimer() {
-        const startTime = GLib.get_monotonic_time();
-        this._timerId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 1, () => {
-            const secondsElapsed = (GLib.get_monotonic_time() - startTime) / 1000000;
-            this._secondsLeft = this._totalSeconds - secondsElapsed;
-            if (this._secondsLeft > 0) {
-                this._sync();
-                return GLib.SOURCE_CONTINUE;
-            }
-
-            this._timerId = 0;
-            this._confirm();
-            return GLib.SOURCE_REMOVE;
-        });
-    }
-
-    _stopTimer() {
-        if (this._timerId) {
-            GLib.source_remove(this._timerId);
-            this._timerId = 0;
-        }
-    }
-});
+function isCancelled(error) {
+    return error instanceof GLib.Error && error.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED);
+}
 
 export default class OneClickBios extends Extension {
     constructor(metadata) {
         super(metadata);
         this._restartAction = null;
         this._originalLabel = null;
-        this._dialog = null;
+        this._cancellable = null;
+        this._sessionSettings = null;
+        this._endSessionDialog = null;
+        // When the restart into firmware was asked for, until gnome-session opens its dialog
+        this._firmwareRequestTime = 0;
+        // Whether the open restart dialog restarts into firmware
+        this._firmwareDialog = false;
+        // Whether logind was told to boot into firmware before the restart was confirmed
+        this._firmwareSetupEarly = false;
     }
 
-    enable() {
+    async enable() {
+        this._cancellable = new Gio.Cancellable();
+
+        // Fail with the reason, shown in the Extensions app, rather than offer a restart that cannot work.
+        // GNOME Shell waits for this before it counts the extension as enabled.
+        const [support] = await callLogind("CanRebootToFirmwareSetup", null, LOGIND_CALL_TIMEOUT, this._cancellable);
+        if (support === "na")
+            throw new Error(notSupportedError());
+        if (support === "no")
+            throw new Error(notAllowedError());
+
+        // gnome-session restarts without asking when this is off, unless an application is busy
+        const schema = Gio.SettingsSchemaSource.get_default().lookup("org.gnome.SessionManager", true);
+        if (schema)
+            this._sessionSettings = new Gio.Settings({ settings_schema: schema });
+
+        this._connectEndSessionDialog();
+
         // If we can find system quicksettings then enable now
         if (Main.panel.statusArea.quickSettings && Main.panel.statusArea.quickSettings._system) {
             this._enable();
         } else {
             let tries = 0;
-            
+
             // Remove previous timer
             if (this._hSysMenuTimer) {
                 GLib.source_remove(this._hSysMenuTimer);
@@ -245,7 +223,10 @@ export default class OneClickBios extends Extension {
         }
 
         // Cancel a pending restart into firmware
-        this._destroyDialog();
+        this._disconnectEndSessionDialog();
+        this._cancellable.cancel();
+        this._cancellable = null;
+        this._sessionSettings = null;
 
         // Destroy timer, if any
         if (this._hSysMenuTimer) {
@@ -285,45 +266,160 @@ export default class OneClickBios extends Extension {
 
     _onRestartKeyPress(event) {
         if ((event.get_state() & Clutter.ModifierType.SHIFT_MASK) && ACTIVATE_KEYS.includes(event.get_key_symbol())) {
-            this._confirmRestartIntoFirmware();
+            this._restartIntoFirmware(event).catch(logError);
             return Clutter.EVENT_STOP;
         }
         return Clutter.EVENT_PROPAGATE;
     }
 
-    // Ask first, like the system restart dialog does
-    _confirmRestartIntoFirmware() {
-        Main.panel.closeQuickSettings();
-
-        this._destroyDialog();
-        this._dialog = new FirmwareDialog(() => this._restartIntoFirmware());
-        // The dialog destroys itself when closed
-        this._dialogDestroyId = this._dialog.connect("destroy", () => {
-            this._dialog = null;
-            this._dialogDestroyId = null;
-        });
-        this._dialog.open();
-    }
-
-    _destroyDialog() {
-        if (this._dialog) {
-            this._dialog.disconnect(this._dialogDestroyId);
-            this._dialog.destroy();
-            this._dialog = null;
-            this._dialogDestroyId = null;
-        }
-    }
-
-    _restartIntoFirmware() {
-        GLib.spawn_command_line_async("systemctl reboot --firmware-setup");
-    }
-
     _onRestartActivated(event) {
-        if (event?.get_state() & Clutter.ModifierType.SHIFT_MASK) {
-            this._confirmRestartIntoFirmware();
-        } else {
-            // Original behaviour: emits "activate", which shows the restart dialog and closes the menu
-            Object.getPrototypeOf(this._restartAction).activate.call(this._restartAction, event);
+        if (event?.get_state() & Clutter.ModifierType.SHIFT_MASK)
+            this._restartIntoFirmware(event).catch(logError);
+        else
+            this._activateRestart(event);
+    }
+
+    // Original behaviour: emits "activate", which asks gnome-session to restart and closes the menu
+    _activateRestart(event) {
+        Object.getPrototypeOf(this._restartAction).activate.call(this._restartAction, event);
+    }
+
+    // Restart the way GNOME does, through gnome-session and its restart dialog, so busy applications
+    // and other users are shown and applications can save their work. The dialog is changed to say
+    // where the restart goes, and logind is told to boot into firmware when the restart is confirmed,
+    // like the dialog's own "Boot Options" does for the boot loader menu.
+    async _restartIntoFirmware(event) {
+        this._firmwareRequestTime = GLib.get_monotonic_time();
+
+        if (this._sessionSettings?.get_boolean("logout-prompt") === false) {
+            // gnome-session will restart without asking, so tell logind now
+            const cancellable = this._cancellable;
+            try {
+                await setRebootToFirmwareSetup(true, cancellable);
+            } catch (e) {
+                this._firmwareRequestTime = 0;
+                if (isCancelled(e)) {
+                    // Disabled meanwhile; logind may have been told already
+                    setRebootToFirmwareSetup(false).catch(logError);
+                } else {
+                    Main.panel.closeQuickSettings();
+                    this._notifyFirmwareSetupFailed(e);
+                }
+                return;
+            }
+            this._firmwareSetupEarly = true;
         }
+
+        this._activateRestart(event);
+    }
+
+    _notifyFirmwareSetupFailed(error) {
+        if (error instanceof GLib.Error)
+            Gio.DBusError.strip_remote_error(error);
+        Main.notifyError(firmwareSetupFailedTitle(), error.message);
+    }
+
+    _connectEndSessionDialog() {
+        const dialog = Main.endSessionDialog;
+        const proto = Object.getPrototypeOf(dialog);
+        this._endSessionDialog = dialog;
+
+        this._dialogStateId = dialog.connect("notify::state", () => this._onDialogStateChanged());
+        // The dialog sets its texts from many places, so put ours back whenever it does
+        this._dialogTitleId = dialog._messageDialogContent.connect("notify::title", () => this._syncDialogText());
+        this._dialogDescriptionId = dialog._messageDialogContent.connect("notify::description",
+            () => this._syncDialogText());
+
+        // Override these methods on the dialog instance only; disable() deletes them, which exposes
+        // the prototype's methods again
+        dialog._confirm = signal => this._confirmDialog(signal);
+        dialog.cancel = () => {
+            if (this._firmwareSetupEarly) {
+                this._firmwareSetupEarly = false;
+                setRebootToFirmwareSetup(false).catch(logError);
+            }
+            proto.cancel.call(dialog);
+        };
+        // "Boot Options" (Alt) goes to the boot loader menu instead
+        dialog._confirmRebootToBootLoaderMenu = () => {
+            this._firmwareDialog = false;
+            proto._confirmRebootToBootLoaderMenu.call(dialog);
+        };
+    }
+
+    _disconnectEndSessionDialog() {
+        const dialog = this._endSessionDialog;
+        if (!dialog)
+            return;
+
+        const open = dialog.state === ModalDialog.State.OPENING || dialog.state === ModalDialog.State.OPENED;
+        if (this._isFirmwareDialog() && open)
+            dialog.cancel();
+
+        dialog.disconnect(this._dialogStateId);
+        dialog._messageDialogContent.disconnect(this._dialogTitleId);
+        dialog._messageDialogContent.disconnect(this._dialogDescriptionId);
+        delete dialog._confirm;
+        delete dialog.cancel;
+        delete dialog._confirmRebootToBootLoaderMenu;
+        this._endSessionDialog = null;
+        this._firmwareRequestTime = 0;
+        this._firmwareDialog = false;
+        this._firmwareSetupEarly = false;
+    }
+
+    _isFirmwareDialog() {
+        // The dialog type is final once the dialog opens: with offline updates scheduled,
+        // GNOME Shell turns a restart into "Restart & Install Updates", which stays as it is
+        return this._firmwareDialog && this._endSessionDialog._type === DIALOG_TYPE_RESTART;
+    }
+
+    _onDialogStateChanged() {
+        if (this._endSessionDialog.state !== ModalDialog.State.OPENING)
+            return;
+
+        // Only the dialog opened for our request restarts into firmware
+        const elapsed = GLib.get_monotonic_time() - this._firmwareRequestTime;
+        this._firmwareDialog = this._firmwareRequestTime > 0 && elapsed < FIRMWARE_REQUEST_TIMEOUT;
+        this._firmwareRequestTime = 0;
+        this._syncDialogText();
+    }
+
+    _syncDialogText() {
+        if (!this._isFirmwareDialog())
+            return;
+
+        const dialog = this._endSessionDialog;
+        const total = dialog._totalSecondsToStayOpen;
+        // The countdown has not started yet while the dialog is opening
+        const secondsLeft = dialog._secondsLeft > 0 ? dialog._secondsLeft : total;
+        dialog._messageDialogContent.title = firmwareDialogTitle();
+        dialog._messageDialogContent.description = firmwareDialogDescription(
+            roundSecondsToInterval(total, secondsLeft, DIALOG_INTERVAL));
+    }
+
+    // Called by the dialog when the restart is confirmed, by its button or at the end of the countdown
+    async _confirmDialog(signal) {
+        const dialog = this._endSessionDialog;
+        const proto = Object.getPrototypeOf(dialog);
+
+        if (signal === "ConfirmedReboot" && this._isFirmwareDialog()) {
+            this._firmwareDialog = false;
+            const cancellable = this._cancellable;
+            try {
+                await setRebootToFirmwareSetup(true, cancellable);
+            } catch (e) {
+                // Don't restart normally instead
+                proto.cancel.call(dialog);
+                if (isCancelled(e))
+                    setRebootToFirmwareSetup(false).catch(logError);
+                else
+                    this._notifyFirmwareSetupFailed(e);
+                return;
+            }
+        }
+
+        this._firmwareSetupEarly = false;
+        await proto._confirm.call(dialog, signal);
     }
 }

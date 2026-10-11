@@ -1,10 +1,12 @@
 #!/bin/bash
 # Runs the extension in an isolated headless GNOME Shell and drives it with
 # tests/ocbtest@local. Needs no graphical session (works over SSH) and does not
-# touch the user's real settings: HOME, XDG dirs and the session bus are all
-# temporary, and a fake systemctl records reboot requests instead of rebooting.
+# touch the user's real settings: HOME, XDG dirs, the session bus and the system
+# bus are all temporary. On these buses, tests/fake-services.js stands in for
+# systemd-logind and gnome-session and records restart requests instead of
+# restarting; a fake systemctl first in PATH is a second safety net.
 #
-# Needs msgfmt (gettext) to compile translations.
+# Needs msgfmt (gettext) to compile translations, and gjs and dbus-daemon.
 #
 # Usage: tests/run.sh
 # Set OCB_SCREENSHOT_DIR to an existing directory to also save screenshots of the
@@ -25,12 +27,24 @@ mkdir -p "$T"/{home,config,data/gnome-shell/extensions,cache}
 cp -r "$TESTS/ocbtest@local" "$T/data/gnome-shell/extensions/"
 
 export HOME=$T/home XDG_CONFIG_HOME=$T/config XDG_DATA_HOME=$T/data XDG_CACHE_HOME=$T/cache
-export OCB_TEST_DIR=$T PATH=$TESTS/bin:$PATH TIMEOUT
+export OCB_TEST_DIR=$T PATH=$TESTS/bin:$PATH TIMEOUT TESTS
 unset DBUS_SESSION_BUS_ADDRESS DISPLAY WAYLAND_DISPLAY
 
 dbus-run-session -- bash -c '
     gsettings set org.gnome.shell enabled-extensions "[\"oneclickbios@sao.studio\", \"ocbtest@local\"]"
     gsettings set org.gnome.shell welcome-dialog-last-shown-version "999"
+
+    # A private bus in place of the system bus, for the fake systemd-logind
+    dbus-daemon --session --fork --print-address=3 --print-pid=4 \
+        3> "$OCB_TEST_DIR/system-bus" 4> "$OCB_TEST_DIR/system-bus.pid"
+    export DBUS_SYSTEM_BUS_ADDRESS=$(cat "$OCB_TEST_DIR/system-bus")
+    gjs -m "$TESTS/fake-services.js" > "$OCB_TEST_DIR/services.out" 2>&1 &
+    services=$!
+    for _ in $(seq 1 50); do
+        grep -qx ready "$OCB_TEST_DIR/services.log" 2>/dev/null && break
+        sleep 0.2
+    done
+
     gnome-shell --headless --wayland --no-x11 --wayland-display=ocb-test-0 \
         --virtual-monitor 1280x800 > "$OCB_TEST_DIR/shell.log" 2>&1 &
     pid=$!
@@ -41,6 +55,7 @@ dbus-run-session -- bash -c '
     done
     kill "$pid" 2>/dev/null
     wait "$pid" 2>/dev/null
+    kill "$services" "$(cat "$OCB_TEST_DIR/system-bus.pid")" 2>/dev/null
 ' > /dev/null 2>&1
 
 grep -E "OCBTEST:|JS ERROR|oneclickbios" "$T/shell.log" | sed -E "s/^.*OCBTEST: //"
