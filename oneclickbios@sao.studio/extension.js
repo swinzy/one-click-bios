@@ -131,31 +131,31 @@ export default class OneClickBios extends Extension {
             let tries = 0;
 
             // Remove previous timer
-            if (this._hSysMenuTimer) {
-                GLib.source_remove(this._hSysMenuTimer);
-                this._hSysMenuTimer = null;
+            if (this._findSystemMenuTimerId) {
+                GLib.source_remove(this._findSystemMenuTimerId);
+                this._findSystemMenuTimerId = null;
             }
 
             // Set timer loop to try finding system menu
-            this._hSysMenuTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, FIND_SYS_MENU_TIMEOUT, () => {
+            this._findSystemMenuTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, FIND_SYS_MENU_TIMEOUT, () => {
                 // If too many retries
                 if (tries >= FIND_SYS_MENU_MAX_RETRY) {
                     console.error(`${this.metadata.name}: Cannot find system menu.`);
-                    this._hSysMenuTimer = null;
-                    return false;
+                    this._findSystemMenuTimerId = null;
+                    return GLib.SOURCE_REMOVE;
                 }
 
                 // FOUND
                 if (Main.panel.statusArea.quickSettings && Main.panel.statusArea.quickSettings._system) {
-                    this._hSysMenuTimer = null;
+                    this._findSystemMenuTimerId = null;
                     this._enable();
-                    return false;
+                    return GLib.SOURCE_REMOVE;
                 }
 
                 // NOT FOUND
                 tries++;
-                return true;
-            })
+                return GLib.SOURCE_CONTINUE;
+            });
         }
     }
 
@@ -163,13 +163,12 @@ export default class OneClickBios extends Extension {
         // This is the live instance of the System Item
         const SystemItem = Main.panel.statusArea.quickSettings._system._systemItem;
 
-        // Find Power menu dynamically
-        var powerMenu = null;
+        // Find Power menu dynamically. The item has no name or ID, so match its class name.
+        let powerMenu = null;
         for (let i = 0; i < SystemItem.child.get_children().length; i++) {
-            let child = SystemItem.child.get_child_at_index(i);
+            const child = SystemItem.child.get_child_at_index(i);
 
-            // TODO: Please someone find me a better solution!
-            if (child.constructor.name == "ShutdownItem") {
+            if (child.constructor.name === "ShutdownItem") {
                 powerMenu = child.menu;
                 break;
             }
@@ -229,18 +228,18 @@ export default class OneClickBios extends Extension {
         this._sessionSettings = null;
 
         // Destroy timer, if any
-        if (this._hSysMenuTimer) {
-            GLib.source_remove(this._hSysMenuTimer);
-            this._hSysMenuTimer = null;
+        if (this._findSystemMenuTimerId) {
+            GLib.source_remove(this._findSystemMenuTimerId);
+            this._findSystemMenuTimerId = null;
         }
     }
 
     _syncShiftPolling() {
         if (this._restartAction.mapped) {
-            if (!this._hShiftPollTimer) {
-                this._hShiftPollTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SHIFT_POLL_INTERVAL, () => {
+            if (!this._shiftPollTimerId) {
+                this._shiftPollTimerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SHIFT_POLL_INTERVAL, () => {
                     this._updateLabel();
-                    return true;
+                    return GLib.SOURCE_CONTINUE;
                 });
             }
             this._updateLabel();
@@ -251,9 +250,9 @@ export default class OneClickBios extends Extension {
     }
 
     _removeShiftPollTimer() {
-        if (this._hShiftPollTimer) {
-            GLib.source_remove(this._hShiftPollTimer);
-            this._hShiftPollTimer = null;
+        if (this._shiftPollTimerId) {
+            GLib.source_remove(this._shiftPollTimerId);
+            this._shiftPollTimerId = null;
         }
     }
 
